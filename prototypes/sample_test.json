@@ -1,0 +1,30 @@
+{
+    "name": "Sample Quino.ai Navigation Test",
+    "description": "This scenario demonstrates navigating through the Quino.ai website",
+    "steps": [
+      {
+        "description": "Click on For Students link",
+        "selector": "a.framer-ZoKD2.framer-y332qp.framer-v-1fuv3bz",
+        "action": "click",
+        "wait": 2
+      },
+      {
+        "description": "Click on Contact us link",
+        "selector": "a.framer-MCUNg.framer-n4ifp1.framer-v-n4ifp1",
+        "action": "click",
+        "wait": 2
+      },
+      {
+        "description": "Hover over Pricing link",
+        "selector": "a.framer-text.framer-styles-preset-9jm5wm",
+        "action": "hover",
+        "wait": 1
+      },
+      {
+        "description": "Fill in a contact form field (if available)",
+        "selector": "input[type='email']",
+        "action": "fill:test@example.com",
+        "wait": 1
+      }
+    ]
+  }
