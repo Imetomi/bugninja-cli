@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+import traceback
 
 import dotenv
 from playwright.async_api import async_playwright, Page, Browser, BrowserContext
@@ -54,6 +55,7 @@ class BugNinja:
         self.step_count = 0
         self.goal_achieved = False
         self.conversation_history = []
+        self.last_action = None  # Initialize last_action tracking
 
         # Get all environment variables
         self.env_variables = self._get_environment_variables()
@@ -297,7 +299,10 @@ class BugNinja:
                     'a', 'button', 'input', 'select', 'textarea',
                     '[role="button"]', '[role="link"]', '[role="checkbox"]',
                     '[role="radio"]', '[role="tab"]', '[role="menuitem"]',
-                    '[onclick]', '[class*="btn"]', '[class*="button"]'
+                    '[role="search"]', '[role="searchbox"]',
+                    '[onclick]', '[class*="btn"]', '[class*="button"]',
+                    '[aria-label*="search"]', '[placeholder*="search"]',
+                    '[name*="search"]', '[id*="search"]', '[title*="search"]'
                 ];
                 
                 const elements = Array.from(document.querySelectorAll(selectors.join(',')));
@@ -315,6 +320,12 @@ class BugNinja:
                     })
                     .map((el, index) => {
                         const rect = el.getBoundingClientRect();
+                        // Get all attributes as a map
+                        const attributes = {};
+                        Array.from(el.attributes).forEach(attr => {
+                            attributes[attr.name] = attr.value;
+                        });
+                        
                         return {
                             id: index,
                             tag: el.tagName.toLowerCase(),
@@ -326,11 +337,18 @@ class BugNinja:
                             id_attr: el.getAttribute('id') || '',
                             class_attr: el.getAttribute('class') || '',
                             href: el.getAttribute('href') || '',
+                            aria_label: el.getAttribute('aria-label') || '',
+                            aria_role: el.getAttribute('role') || '',
+                            title: el.getAttribute('title') || '',
+                            alt: el.getAttribute('alt') || '',
+                            attributes: attributes,
                             x: rect.x,
                             y: rect.y,
                             width: rect.width,
                             height: rect.height,
-                            is_visible: true
+                            is_visible: true,
+                            is_enabled: !el.disabled,
+                            is_required: el.required || false
                         };
                     });
             };
@@ -362,6 +380,14 @@ IMPORTANT PRIORITIES:
 4. Try to examine multiple options if the first try didn't work in a previous step for a specific task.
 5. Evaluate if the goal has been achieved after each step
 
+SEARCH OPERATION GUIDANCE:
+When performing search operations:
+1. First identify the search input field and type the search query
+2. After typing, look for a search button or submit button to click
+3. If no button is visible, the system will automatically press Enter after typing in search fields
+4. Do not repeatedly click on the same search field - instead look for a submit button or suggest pressing Enter
+5. Search forms typically have a magnifying glass icon or a button labeled "Search" or "Go"
+
 For each step, you will:
 1. Analyze the screenshot of the current webpage
 2. Choose ONE element to interact with (click or type)
@@ -369,9 +395,18 @@ For each step, you will:
 4. Explain your reasoning
 5. Indicate if you believe the goal has been achieved
 
+ELEMENT IDENTIFICATION GUIDANCE:
+When identifying elements, provide as much descriptive information as possible:
+1. Include a clear element_description that describes what the element is (e.g., "search input field", "submit button")
+2. For search operations, explicitly mention "search" in your descriptions
+3. If targeting a specific input field, mention its purpose (e.g., "email input", "password field")
+4. If you see a specific ID, class, or placeholder text in the element, include that in your reasoning
+5. Describe the visual characteristics and location of the element when possible
+
 Respond in JSON format with these fields:
 - action: "click" or "type"
 - element_id: ID of the element to interact with
+- element_description: Detailed description of what the element is and its purpose
 - input_text: Text to type (only for "type" actions)
 - reasoning: Brief explanation of your decision
 - goal_achieved: true/false whether the goal has been completed
@@ -435,9 +470,109 @@ Open tabs: {json.dumps(open_tabs)}
                     other_vars_str.append(f"{name}: [REDACTED]")
             user_message += f"Other variables: {', '.join(other_vars_str)}\n"
 
-        user_message += """
-Please analyze the screenshot and choose the next action to take.
-"""
+        # Add enhanced element information
+        user_message += "\nInteractive Elements:\n"
+
+        # Group elements by type for better organization
+        input_elements = []
+        button_elements = []
+        link_elements = []
+        other_elements = []
+
+        for element in elements:
+            if element["tag"] == "input" or element["tag"] == "textarea":
+                input_elements.append(element)
+            elif (
+                element["tag"] == "button"
+                or "button" in element["class_attr"].lower()
+                or element["aria_role"] == "button"
+            ):
+                button_elements.append(element)
+            elif element["tag"] == "a" or element["aria_role"] == "link":
+                link_elements.append(element)
+            else:
+                other_elements.append(element)
+
+        # Add search-related elements first (highest priority)
+        search_elements = []
+        for element in elements:
+            is_search = (
+                element["type"] == "search"
+                or "search" in (element["id_attr"] or "").lower()
+                or "search" in (element["name"] or "").lower()
+                or "search" in (element["placeholder"] or "").lower()
+                or "search" in (element["aria_label"] or "").lower()
+                or element["aria_role"] == "search"
+                or element["aria_role"] == "searchbox"
+            )
+            if is_search:
+                search_elements.append(element)
+
+        if search_elements:
+            user_message += "\nSearch Elements:\n"
+            for element in search_elements:
+                desc = self._get_element_description(element)
+                attrs = []
+                if element["id_attr"]:
+                    attrs.append(f"id='{element['id_attr']}'")
+                if element["placeholder"]:
+                    attrs.append(f"placeholder='{element['placeholder']}'")
+                if element["name"]:
+                    attrs.append(f"name='{element['name']}'")
+                if element["aria_label"]:
+                    attrs.append(f"aria-label='{element['aria_label']}'")
+
+                user_message += (
+                    f"- Element #{element['id']}: {desc} ({', '.join(attrs)})\n"
+                )
+
+        # Add input fields
+        if input_elements:
+            user_message += "\nInput Elements:\n"
+            for element in input_elements:
+                if element in search_elements:
+                    continue  # Skip if already listed in search elements
+                desc = self._get_element_description(element)
+                attrs = []
+                if element["id_attr"]:
+                    attrs.append(f"id='{element['id_attr']}'")
+                if element["placeholder"]:
+                    attrs.append(f"placeholder='{element['placeholder']}'")
+                if element["name"]:
+                    attrs.append(f"name='{element['name']}'")
+                if element["type"]:
+                    attrs.append(f"type='{element['type']}'")
+
+                user_message += (
+                    f"- Element #{element['id']}: {desc} ({', '.join(attrs)})\n"
+                )
+
+        # Add buttons
+        if button_elements:
+            user_message += "\nButton Elements:\n"
+            for element in button_elements:
+                desc = self._get_element_description(element)
+                user_message += f"- Element #{element['id']}: {desc}\n"
+
+        # Add links
+        if link_elements:
+            user_message += "\nLink Elements:\n"
+            for element in link_elements:
+                desc = self._get_element_description(element)
+                user_message += f"- Element #{element['id']}: {desc}\n"
+
+        # Add other interactive elements
+        if other_elements:
+            user_message += "\nOther Interactive Elements:\n"
+            for element in other_elements:
+                desc = self._get_element_description(element)
+                user_message += f"- Element #{element['id']}: {desc}\n"
+
+        # Add a note about element identification
+        user_message += "\nNOTE: When referring to elements, provide detailed descriptions to help with identification. For search operations, explicitly mention 'search' in your element_description."
+
+        # Encode the screenshot
+        image_base64 = self._encode_image(screenshot_path)
 
         # Add the conversation history to provide context
         messages = [
@@ -456,9 +591,7 @@ Please analyze the screenshot and choose the next action to take.
                     {"type": "text", "text": user_message},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{self._encode_image(screenshot_path)}"
-                        },
+                        "image_url": {"url": f"data:image/png;base64,{image_base64}"},
                     },
                 ],
             }
@@ -567,11 +700,86 @@ Please analyze the screenshot and choose the next action to take.
             element_id = decision.get("element_id")
             action = decision.get("action", "click")
 
-            # Find the element in the list
-            element = next((e for e in elements if e["id"] == element_id), None)
+            # Find the element using our fallback strategy
+            element = self._find_element_with_fallback(element_id, decision, elements)
+
+            # Track the last action for better decision making
+            current_action = {"element_id": element_id, "action": action}
+
+            # Check if we're repeating the same action
+            if hasattr(self, "last_action") and self.last_action:
+                if (
+                    self.last_action["element_id"] == current_action["element_id"]
+                    and self.last_action["action"] == current_action["action"]
+                ):
+                    # We're repeating the same action, try alternative approaches
+                    print(
+                        "⚠️ Repeating the same action detected, trying alternative approaches"
+                    )
+
+                    # If we're clicking on a search field again, try pressing Enter instead
+                    if (
+                        action == "click"
+                        and element
+                        and self._is_search_element(element)
+                    ):
+                        print(
+                            "🔍 Search element detected, pressing Enter to submit search"
+                        )
+                        await self.page.keyboard.press("Enter")
+                        self.last_action = {
+                            "element_id": element_id,
+                            "action": "press_enter",
+                        }
+                        return True
+
+                    # Try to find a submit button if we're repeating a click on an input field
+                    if element and (
+                        element["tag"] == "input" or element["tag"] == "textarea"
+                    ):
+                        submit_button = self._find_submit_button(elements)
+                        if submit_button:
+                            print(
+                                f"🔍 Found submit button, clicking instead of repeating action"
+                            )
+                            x = submit_button["x"] + submit_button["width"] / 2
+                            y = submit_button["y"] + submit_button["height"] / 2
+                            await self.page.mouse.click(x, y)
+                            self.last_action = {
+                                "element_id": submit_button["id"],
+                                "action": "click",
+                            }
+                            return True
 
             if not element:
-                print(f"⚠️ Element with ID {element_id} not found")
+                # If element not found, try to find a submit button if we're likely in a search context
+                if (
+                    "search" in decision.get("element_description", "").lower()
+                    or "search" in decision.get("input_text", "").lower()
+                ):
+                    submit_button = self._find_submit_button(elements)
+                    if submit_button:
+                        print(
+                            f"🔍 Element not found, but found a submit button that might help"
+                        )
+                        x = submit_button["x"] + submit_button["width"] / 2
+                        y = submit_button["y"] + submit_button["height"] / 2
+                        await self.page.mouse.click(x, y)
+                        self.last_action = {
+                            "element_id": submit_button["id"],
+                            "action": "click",
+                        }
+                        return True
+                    else:
+                        # Try pressing Enter as a last resort for search
+                        print("🔍 No submit button found, pressing Enter as fallback")
+                        await self.page.keyboard.press("Enter")
+                        self.last_action = {"element_id": None, "action": "press_enter"}
+                        return True
+
+                print(
+                    f"⚠️ Element with ID {element_id} not found after trying fallback strategies"
+                )
                 return False
 
             # Get a descriptive name for the element
@@ -583,7 +791,17 @@ Please analyze the screenshot and choose the next action to take.
                 x = element["x"] + element["width"] / 2
                 y = element["y"] + element["height"] / 2
                 await self.page.mouse.click(x, y)
-                print(f"👆 Clicked on element #{element_id}: {element_desc}")
+                print(f"👆 Clicked on element #{element['id']}: {element_desc}")
+
+                # If this is a search input and we're clicking it again, also press Enter
+                if (
+                    self._is_search_element(element)
+                    and hasattr(self, "last_action")
+                    and self.last_action
+                ):
+                    if self.last_action.get("element_id") == element["id"]:
+                        print("🔍 Clicking search element again, also pressing Enter")
+                        await self.page.keyboard.press("Enter")
 
             elif action == "type":
                 input_text = decision.get("input_text", "")
@@ -605,18 +823,196 @@ Please analyze the screenshot and choose the next action to take.
                 # Print with masked value if sensitive
                 if is_sensitive:
                     print(
-                        f"⌨️ Typed [REDACTED] into element #{element_id}: {element_desc}"
+                        f"⌨️ Typed [REDACTED] into element #{element['id']}: {element_desc}"
                     )
                 else:
                     print(
-                        f"⌨️ Typed '{input_text}' into element #{element_id}: {element_desc}"
+                        f"⌨️ Typed '{input_text}' into element #{element['id']}: {element_desc}"
                     )
 
+                # If this is a search input, automatically press Enter after typing
+                if self._is_search_element(element):
+                    print("🔍 Search input detected, pressing Enter after typing")
+                    await self.page.keyboard.press("Enter")
+
+            # Store the last action for reference
+            self.last_action = current_action
             return True
 
         except Exception as e:
             print(f"❌ Error executing decision: {e}")
             return False
+
+    def _is_search_element(self, element):
+        """Check if an element is likely a search input"""
+        return (
+            element["type"] == "search"
+            or "search" in (element["id_attr"] or "").lower()
+            or "search" in (element["name"] or "").lower()
+            or "search" in (element["placeholder"] or "").lower()
+            or "search" in (element["aria_label"] or "").lower()
+            or element["aria_role"] == "search"
+            or element["aria_role"] == "searchbox"
+        )
+
+    def _find_submit_button(self, elements):
+        """Find a submit button that might be associated with a form/search"""
+        # Look for submit buttons
+        submit_button = next(
+            (
+                e
+                for e in elements
+                if (
+                    e["type"] == "submit"
+                    or (e["tag"] == "button" and e["type"] == "submit")
+                    or (e["tag"] == "input" and e["type"] == "submit")
+                )
+            ),
+            None,
+        )
+
+        if submit_button:
+            return submit_button
+
+        # Look for buttons with search-related attributes
+        search_button = next(
+            (
+                e
+                for e in elements
+                if (
+                    (
+                        e["tag"] == "button"
+                        or "button" in e["class_attr"].lower()
+                        or e["aria_role"] == "button"
+                    )
+                    and (
+                        "search" in (e["id_attr"] or "").lower()
+                        or "search" in (e["name"] or "").lower()
+                        or "search" in (e["text"] or "").lower()
+                        or "search" in (e["aria_label"] or "").lower()
+                    )
+                )
+            ),
+            None,
+        )
+
+        if search_button:
+            return search_button
+
+        # Look for elements with magnifying glass icon or search icon classes
+        icon_button = next(
+            (
+                e
+                for e in elements
+                if (
+                    "search-icon" in (e["class_attr"] or "").lower()
+                    or "searchicon" in (e["class_attr"] or "").lower()
+                    or "icon-search" in (e["class_attr"] or "").lower()
+                    or "fa-search" in (e["class_attr"] or "").lower()
+                    or "material-icons" in (e["class_attr"] or "").lower()
+                    and "search" in (e["text"] or "").lower()
+                )
+            ),
+            None,
+        )
+
+        return icon_button
+
+    def _find_element_with_fallback(self, element_id, decision, elements):
+        """
+        Find an element using multiple fallback strategies:
+        1. Try exact ID match first
+        2. Try matching by element attributes (placeholder, name, etc.)
+        3. Try matching by element text content
+        4. Try matching by element description/type
+        """
+        # Strategy 1: Exact ID match (original approach)
+        element = next((e for e in elements if e["id"] == element_id), None)
+        if element:
+            print(f"✅ Found element by exact ID: {element_id}")
+            return element
+
+        # Get additional context from the decision
+        target_text = decision.get("input_text", "")
+        element_description = decision.get("element_description", "")
+
+        # Strategy 2: Match by HTML ID attribute
+        if element_id and element_id.startswith("#"):
+            # Handle cases where the AI provides a CSS selector like "#search-input"
+            html_id = element_id.lstrip("#")
+            element = next((e for e in elements if e["id_attr"] == html_id), None)
+            if element:
+                print(f"✅ Found element by HTML ID attribute: {html_id}")
+                return element
+
+        # Strategy 3: Match by placeholder text
+        if target_text or element_description:
+            search_terms = [
+                term.lower() for term in [target_text, element_description] if term
+            ]
+
+            # Look for elements with matching placeholder text
+            for term in search_terms:
+                for e in elements:
+                    if e["placeholder"] and term in e["placeholder"].lower():
+                        print(
+                            f"✅ Found element by placeholder text containing: {term}"
+                        )
+                        return e
+
+            # Strategy 4: Match by name attribute
+            for term in search_terms:
+                for e in elements:
+                    if e["name"] and term in e["name"].lower():
+                        print(f"✅ Found element by name attribute containing: {term}")
+                        return e
+
+            # Strategy 5: Match by visible text content
+            for term in search_terms:
+                for e in elements:
+                    if e["text"] and term in e["text"].lower():
+                        print(f"✅ Found element by text content containing: {term}")
+                        return e
+
+        # Strategy 6: Look for search-related elements
+        if "search" in element_description.lower() or "search" in target_text.lower():
+            # Look for search inputs
+            search_element = next(
+                (
+                    e
+                    for e in elements
+                    if (
+                        e["type"] == "search"
+                        or "search" in (e["id_attr"] or "").lower()
+                        or "search" in (e["name"] or "").lower()
+                        or "search" in (e["placeholder"] or "").lower()
+                    )
+                ),
+                None,
+            )
+            if search_element:
+                print(f"✅ Found search element by search-related attributes")
+                return search_element
+
+        # Strategy 7: Type-based fallback for common elements
+        if "type" in decision:
+            element_type = decision["type"].lower()
+            if element_type in ["text", "search", "email", "password"]:
+                # Find the first input of that type
+                input_element = next(
+                    (
+                        e
+                        for e in elements
+                        if e["tag"] == "input" and e["type"] == element_type
+                    ),
+                    None,
+                )
+                if input_element:
+                    print(f"✅ Found element by input type: {element_type}")
+                    return input_element
+
+        # No matching element found after all fallback strategies
+        return None
 
     def _get_element_description(self, element):
         """Get a descriptive name for an element"""
@@ -765,70 +1161,91 @@ Consider all the previous steps and actions taken so far.
             return False, 0.0, "Failed to parse response"
 
     async def run_test(self, url, goal, max_steps=10):
-        """Run the test with the given URL and goal"""
-        print(f"🌐 Starting test with URL: {url}")
-        print(f"🎯 Goal: {goal}")
+        """Run a test with the given URL and goal"""
+        try:
+            print(f"🌐 Starting test with URL: {url}")
+            print(f"🎯 Goal: {goal}")
 
-        # Navigate to the URL
-        await self.page.goto(url)
+            # Reset state
+            self.step_count = 0
+            self.goal_achieved = False
+            self.conversation_history = []
+            self.last_action = None  # Initialize last_action tracking
 
-        # Main loop
-        while self.step_count < max_steps and not self.goal_achieved:
-            self.step_count += 1
-            print(f"\n📍 Step {self.step_count}/{max_steps}")
+            # Navigate to the URL
+            await self.page.goto(url)
 
-            # Verify we have a valid page
-            if not self.page or not self.pages:
-                print("⚠️ No valid page available, creating a new one")
-                self.page = await self.context.new_page()
-                self.pages.append(self.page)
-                await self._setup_page_event_handlers(self.page)
-                await self.page.goto(url)
+            # Main test loop
+            while self.step_count < max_steps and not self.goal_achieved:
+                self.step_count += 1
+                print(f"\n📍 Step {self.step_count}/{max_steps}")
 
-            # Wait for the page to load
-            await self.wait_for_page_load()
+                # Wait for the page to fully load
+                await self.wait_for_page_load()
+                print("📄 Page fully loaded")
 
-            # Take a screenshot
-            screenshot_path = await self.take_screenshot()
+                # Gather all elements from the page
+                elements = await self.gather_page_elements()
 
-            # Gather elements
-            elements = await self.gather_page_elements()
+                # Take a screenshot
+                screenshot_path = await self.take_screenshot()
 
-            # Get current URL
-            current_url = self.page.url
+                # Ask AI for a decision
+                decision = await self.ask_ai_for_decision(
+                    screenshot_path, elements, goal, self.page.url
+                )
 
-            # Check if goal has been achieved (dedicated check)
-            if self.step_count > 1:  # Skip on first step
-                await self.check_goal_completion(screenshot_path, goal, current_url)
+                # Execute the decision
+                success = await self.execute_decision(decision, elements)
 
-                # If goal achieved, break the loop
-                if self.goal_achieved:
-                    print("🏆 Goal achieved! Test completed successfully.")
-                    break
+                # Check if the goal has been achieved
+                if decision.get("goal_achieved", False):
+                    confidence = decision.get("confidence", 0)
+                    if confidence >= self.goal_confidence:
+                        print(
+                            f"🎉 Goal achieved with confidence {confidence:.2f} (threshold: {self.goal_confidence:.2f})"
+                        )
+                        self.goal_achieved = True
+                    else:
+                        print(
+                            f"⚠️ Goal detection: Not achieved (confidence: {confidence:.2f})"
+                        )
 
-            # Ask AI for decision
-            decision = await self.ask_ai_for_decision(
-                screenshot_path, elements, goal, current_url
-            )
+                        # Double-check with a separate goal completion check
+                        goal_check = await self.check_goal_completion(
+                            screenshot_path, goal, self.page.url
+                        )
+                        if goal_check.get("goal_achieved", False):
+                            confidence = goal_check.get("confidence", 0)
+                            if confidence >= self.goal_confidence:
+                                print(
+                                    f"🎉 Goal verification: Achieved with confidence {confidence:.2f}"
+                                )
+                                self.goal_achieved = True
+                            else:
+                                print(
+                                    f"⚠️ Goal verification: Not achieved (confidence: {confidence:.2f})"
+                                )
+                        else:
+                            print("⚠️ Goal verification: Not achieved")
+                else:
+                    print("⚠️ Goal detection: Not achieved")
 
-            # Check if goal is achieved from decision
+                # Wait a bit before the next action to allow page to update
+                await asyncio.sleep(1)
+
+            # Final result
             if self.goal_achieved:
-                print("🏆 Goal achieved! Test completed successfully.")
-                break
+                print(f"✅ Test completed successfully in {self.step_count} steps")
+                return True
+            else:
+                print(f"❌ Test failed to achieve the goal in {max_steps} steps")
+                return False
 
-            # Execute the decision
-            success = await self.execute_decision(decision, elements)
-
-            # Wait a bit for the action to take effect
-            await asyncio.sleep(2)
-
-        if not self.goal_achieved and self.step_count >= max_steps:
-            print("⏱️ Maximum steps reached without achieving the goal")
-
-        # Take a final screenshot
-        await self.take_screenshot()
-
-        return self.goal_achieved
+        except Exception as e:
+            print(f"❌ Error during test: {e}")
+            traceback.print_exc()
+            return False
 
     def _encode_image(self, image_path):
         """Encode image to base64 for API request"""

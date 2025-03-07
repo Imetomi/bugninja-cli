@@ -1,123 +1,178 @@
 # BugNinja - AI-Driven Web Testing Tool
 
-BugNinja is an automated web testing tool that uses Azure OpenAI's vision capabilities to navigate websites and perform tasks without predefined scripts.
+BugNinja is a powerful, automated web testing tool that uses AI to navigate websites and accomplish user-defined goals. It combines Playwright for browser automation with Azure OpenAI's GPT models to create an intelligent testing agent that can understand and interact with web interfaces just like a human would.
 
-## Features
+## Key Features
 
-- 🤖 AI-driven navigation using Azure OpenAI's vision capabilities
-- 🎥 Video recording of the entire browsing session
-- 📸 Screenshot capture at each decision point
-- 🍪 Smart cookie banner handling with AI vision
-- 🔑 Secure credential handling for login forms
-- 🎯 Automatic goal detection with AI vision analysis
-- 🏆 Smart test completion when goal is achieved
+### Core Functionality
+- **Goal-Driven Testing**: Define a goal in natural language, and BugNinja will work to accomplish it
+- **Automated Browser Control**: Uses Playwright to control browser sessions and interact with web elements
+- **AI-Powered Decision Making**: Leverages Azure OpenAI to analyze screenshots and make intelligent decisions
+- **Video Recording**: Captures the entire testing session for review and debugging
 
-## Installation
+### Smart Element Interaction
+- **Robust Element Identification**: Multiple fallback strategies to find elements even when IDs change:
+  - ID-based selection
+  - HTML attribute matching (placeholder, name, aria-labels)
+  - Text content matching
+  - Element type and role detection
+  - Search-specific element detection
+- **Form Handling**:
+  - Automatic form submission with Enter key
+  - Submit button detection and clicking
+  - Sensitive field detection and masking
+- **Search Optimization**:
+  - Specialized handling for search operations
+  - Automatic Enter key press after typing in search fields
+  - Search button detection (including magnifying glass icons)
 
-1. Clone this repository:
-```bash
-git clone https://github.com/yourusername/bugninja.git
-cd bugninja
-```
+### Advanced Navigation
+- **Tab Management**: Tracks and manages multiple browser tabs
+- **Cookie & Privacy Handling**: Prioritizes handling cookie banners and privacy prompts
+- **Login Support**: Can use provided credentials to authenticate when needed
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+### Intelligent Decision Making
+- **Action Repetition Prevention**: Detects and avoids repeating the same ineffective actions
+- **Alternative Approach Finding**: Tries different strategies when the primary approach fails
+- **Goal Completion Verification**: Continuously checks if the goal has been achieved
 
-3. Install Playwright browsers:
-```bash
-python -m playwright install
-```
-
-4. Create a `.env` file with your Azure OpenAI credentials:
-```
-AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
-AZURE_OPENAI_API_KEY=your-api-key
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o  # Or your deployment name
-```
-
-## Usage
-
-Run BugNinja with the following command:
-
-```bash
-python bugninja.py --url "https://example.com" --goal "Sign in and check dashboard" --max-steps 20 --output-dir "./output" --headless
-```
-
-### Command Line Arguments
-
-- `--url`: Starting website URL (required)
-- `--goal`: Task description for the AI (required)
-- `--max-steps`: Maximum actions to take (default: 10)
-- `--output-dir`: Where to save screenshots and videos (default: ./output)
-- `--headless`: Run in headless mode (flag, default is visible browser)
-- `--video-quality`: Quality of video recording (low/medium/high, default: medium)
-- `--goal-confidence`: Confidence threshold for goal detection (0.0-1.0, default: 0.8)
-
-### Environment Variables
-
-You can set these environment variables in your `.env` file for the AI to use when filling forms:
-
-- `EMAIL`: Email address for login forms
-- `PASSWORD`: Password for login forms
-- `USERNAME`: Username for login forms
-- `API_KEY`: API key for authentication
-- `PHONE`: Phone number for forms
+### Debugging & Monitoring
+- **Detailed Logging**: Comprehensive logging of all actions and decisions
+- **Screenshot Capture**: Takes screenshots at each step for visual verification
+- **Conversation History**: Maintains a history of AI interactions for context
 
 ## How It Works
 
-1. Launches a browser with Playwright
-2. Ensures the page is fully loaded before proceeding
-3. Takes screenshots of the current page
-4. Sends the screenshot to Azure OpenAI
-5. Checks if the goal has been achieved
-6. If not, asks the AI "what should I click/type next?"
-7. Executes the AI's decision
-8. Repeats until the goal is reached or max steps are taken
+1. **Initialization**: Sets up a browser session with Playwright and configures the environment
+2. **Navigation**: Navigates to the specified URL
+3. **Analysis Loop**:
+   - Waits for the page to fully load
+   - Gathers all interactive elements from the page
+   - Takes a screenshot of the current state
+   - Sends the screenshot, elements, and goal to Azure OpenAI
+   - Receives a decision about what action to take next
+   - Executes the action (click, type, etc.)
+   - Checks if the goal has been achieved
+4. **Completion**: Ends the test when the goal is achieved or the maximum steps are reached
 
-## Improved Cookie Banner Handling
+## Element Identification Strategies
 
-BugNinja uses AI vision to intelligently handle cookie banners and consent dialogs:
+BugNinja uses a sophisticated multi-layered approach to find elements:
 
-- The AI is instructed to give absolute top priority to cookie banners and consent dialogs
-- No hardcoded selectors or patterns are used - the AI visually identifies consent elements
-- The system ensures pages are fully loaded before taking screenshots and making decisions
-- This approach works across different websites with varying cookie banner designs
-- The AI can identify and handle cookie banners in multiple languages
+1. **Exact ID Match**: First tries to find elements by their exact ID
+2. **HTML ID Attribute**: Matches elements by their HTML ID attribute
+3. **Placeholder Text**: Finds elements with matching placeholder text
+4. **Name Attribute**: Matches elements by their name attribute
+5. **Text Content**: Finds elements with matching visible text
+6. **Search-Related Attributes**: Specifically looks for search-related elements
+7. **Type-Based Matching**: Falls back to finding elements by their input type
 
-## Automatic Goal Detection
+## Form Submission Techniques
 
-BugNinja uses AI vision analysis to automatically detect when the testing goal has been achieved:
+BugNinja employs multiple strategies to submit forms:
 
-- After each step, the current screenshot and conversation history are analyzed by Azure OpenAI
-- The AI evaluates whether the goal has been completed based on visual cues
-- The AI considers previous actions and their outcomes when determining goal completion
-- If the goal is detected as achieved with high confidence (>80%), the test completes successfully
-- The AI provides an explanation of why it believes the goal was achieved
-- This eliminates the need for predefined success criteria or manual verification
-- You can adjust the confidence threshold with the `--goal-confidence` option
+1. **Submit Button Detection**: Finds and clicks submit buttons using:
+   - Standard submit buttons (type="submit")
+   - Buttons with search-related text or attributes
+   - Elements with search icon classes
+2. **Enter Key Press**: Automatically presses Enter after typing in search fields
+3. **Repetition Handling**: If clicking a search field multiple times, automatically tries pressing Enter
 
-## Project Structure
+## Environment Variable Management
 
+BugNinja intelligently manages environment variables:
+
+- **Credentials**: Securely handles login credentials
+- **User Information**: Manages user-specific information
+- **Configuration**: Handles configuration variables
+- **Sensitive Data Protection**: Masks sensitive information in logs
+
+## Error Handling
+
+- **Fallback Strategies**: Implements multiple fallback approaches when primary actions fail
+- **Exception Handling**: Robust exception handling throughout the testing process
+- **Detailed Error Reporting**: Provides clear error messages and stack traces
+
+## Usage
+
+### Terminal Usage
+
+BugNinja can be run directly from the terminal:
+
+```bash
+# Basic usage
+python bugninja_v2.py --url "https://example.com" --goal "Search for the history of teddy bears"
+
+# With additional options
+python bugninja_v2.py --url "https://example.com" --goal "Search for the history of teddy bears" --headless --max-steps 15 --output-dir "./test_results"
 ```
-bugninja_v1/
-├── core/                 # Core functionality
-│   ├── ai_service.py     # Azure OpenAI integration
-│   ├── browser_manager.py # Browser session management
-│   ├── element_finder.py # Web element detection
-│   ├── action_executor.py # Action execution
-│   ├── models.py         # Data models
-│   └── web_tester.py     # Main WebTester class
-├── handlers/             # Event handlers
-│   ├── browser_handlers.py # Browser event handlers
-│   └── cookie_handler.py # Cookie banner handling
-├── utils/                # Utility functions
-│   └── helpers.py        # Helper functions
-├── __init__.py           # Package initialization
-└── __main__.py           # Entry point
+
+#### Command Line Arguments:
+
+- `--url`: The URL to test (required)
+- `--goal`: The goal to accomplish in natural language (required)
+- `--headless`: Run in headless mode (no visible browser)
+- `--max-steps`: Maximum number of steps to attempt (default: 10)
+- `--output-dir`: Directory to save screenshots and recordings (default: "./output")
+- `--video-quality`: Quality of video recording (low, medium, high)
+
+### Programmatic Usage
+
+BugNinja can also be used programmatically in your Python code:
+
+```python
+import asyncio
+from bugninja_v2.bugninja import BugNinja
+
+async def main():
+    # Initialize BugNinja
+    bug_ninja = BugNinja(headless=False, output_dir="./test_results")
+    
+    # Start the browser
+    await bug_ninja.start()
+    
+    try:
+        # Run a test with a specific URL and goal
+        await bug_ninja.run_test(
+            url="https://example.com",
+            goal="Search for the history of teddy bears",
+            max_steps=10
+        )
+    finally:
+        # Clean up
+        await bug_ninja.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-## License
+## Requirements
 
-MIT 
+- Python 3.7+
+- Playwright
+- Azure OpenAI API access
+- Required environment variables:
+  - AZURE_OPENAI_API_KEY
+  - AZURE_OPENAI_ENDPOINT
+  - AZURE_OPENAI_DEPLOYMENT_NAME
+
+## Environment Setup
+
+1. Install the required packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Install Playwright browsers:
+   ```bash
+   playwright install
+   ```
+
+3. Create a `.env` file with your Azure OpenAI credentials:
+   ```
+   AZURE_OPENAI_API_KEY=your_api_key
+   AZURE_OPENAI_ENDPOINT=your_endpoint
+   AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
+   ```
+
+BugNinja represents a new generation of AI-powered testing tools that can understand and interact with web interfaces in a human-like manner, making web testing more efficient and effective. 
