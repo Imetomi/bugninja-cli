@@ -1,11 +1,11 @@
-# BugNinja - AI-Driven Web Testing Tool
+# BugNinja CLI - AI-Driven Web Testing Tool
 
-BugNinja is a powerful, automated web testing tool that uses AI to navigate websites and accomplish user-defined goals. It combines Playwright for browser automation with Azure OpenAI's GPT models to create an intelligent testing agent that can understand and interact with web interfaces just like a human would.
+BugNinja CLI is a powerful, automated web testing tool that uses AI to navigate websites and accomplish user-defined goals. It combines Playwright for browser automation with Azure OpenAI's GPT models to create an intelligent testing agent that can understand and interact with web interfaces just like a human would.
 
 ## Key Features
 
 ### Core Functionality
-- **Goal-Driven Testing**: Define a goal in natural language, and BugNinja will work to accomplish it
+- **Goal-Driven Testing**: Define a goal in natural language, and BugNinja CLI will work to accomplish it
 - **Automated Browser Control**: Uses Playwright to control browser sessions and interact with web elements
 - **AI-Powered Decision Making**: Leverages Azure OpenAI to analyze screenshots and make intelligent decisions
 - **Video Recording**: Captures the entire testing session for review and debugging
@@ -25,6 +25,11 @@ BugNinja is a powerful, automated web testing tool that uses AI to navigate webs
   - Specialized handling for search operations
   - Automatic Enter key press after typing in search fields
   - Search button detection (including magnifying glass icons)
+- **Security Challenge Handling**:
+  - Cloudflare "I am human" verification detection and interaction
+  - CAPTCHA challenge identification
+  - Smart iframe handling for security challenges
+  - Prioritization of security verification before other actions
 
 ### Advanced Navigation
 - **Tab Management**: Tracks and manages multiple browser tabs
@@ -57,7 +62,7 @@ BugNinja is a powerful, automated web testing tool that uses AI to navigate webs
 
 ## Element Identification Strategies
 
-BugNinja uses a sophisticated multi-layered approach to find elements:
+BugNinja CLI uses a sophisticated multi-layered approach to find elements:
 
 1. **Exact ID Match**: First tries to find elements by their exact ID
 2. **HTML ID Attribute**: Matches elements by their HTML ID attribute
@@ -67,9 +72,24 @@ BugNinja uses a sophisticated multi-layered approach to find elements:
 6. **Search-Related Attributes**: Specifically looks for search-related elements
 7. **Type-Based Matching**: Falls back to finding elements by their input type
 
+## Security Challenge Handling
+
+BugNinja CLI has specialized handling for security challenges:
+
+1. **Challenge Detection**: Identifies Cloudflare "I am human" verification and other CAPTCHA challenges using:
+   - Challenge-specific keywords in element attributes
+   - Iframe detection for embedded challenges
+   - Visual cues in element text and attributes
+2. **Iframe Handling**: Special handling for challenges inside iframes:
+   - Focuses the iframe first
+   - Attempts to find and interact with the challenge element inside the iframe
+   - Falls back to clicking the center of the iframe if needed
+3. **Prioritization**: Security challenges are given top priority over other page elements
+4. **Wait Strategy**: Implements longer waits after interacting with challenge elements
+
 ## Form Submission Techniques
 
-BugNinja employs multiple strategies to submit forms:
+BugNinja CLI employs multiple strategies to submit forms:
 
 1. **Submit Button Detection**: Finds and clicks submit buttons using:
    - Standard submit buttons (type="submit")
@@ -80,7 +100,7 @@ BugNinja employs multiple strategies to submit forms:
 
 ## Environment Variable Management
 
-BugNinja intelligently manages environment variables:
+BugNinja CLI intelligently manages environment variables:
 
 - **Credentials**: Securely handles login credentials
 - **User Information**: Manages user-specific information
@@ -97,7 +117,7 @@ BugNinja intelligently manages environment variables:
 
 ### Terminal Usage
 
-BugNinja can be run directly from the terminal:
+BugNinja CLI can be run directly from the terminal:
 
 ```bash
 # Basic usage
@@ -118,7 +138,7 @@ python bugninja_v2.py --url "https://example.com" --goal "Search for the history
 
 ### Programmatic Usage
 
-BugNinja can also be used programmatically in your Python code:
+BugNinja CLI can also be used programmatically in your Python code:
 
 ```python
 import asyncio
@@ -175,4 +195,4 @@ if __name__ == "__main__":
    AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
    ```
 
-BugNinja represents a new generation of AI-powered testing tools that can understand and interact with web interfaces in a human-like manner, making web testing more efficient and effective. 
+BugNinja CLI represents a new generation of AI-powered testing tools that can understand and interact with web interfaces in a human-like manner, making web testing more efficient and effective. 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BugNinja v2 - AI-Driven Web Testing Tool
+BugNinja CLI v2 - AI-Driven Web Testing Tool
 CLI entry point
 """
 

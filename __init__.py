@@ -1,5 +1,5 @@
 """
-BugNinja - AI-Driven Web Testing Tool
+BugNinja CLI - AI-Driven Web Testing Tool
 """
 
 from bugninja_v1 import core, handlers, utils
