@@ -374,7 +374,7 @@ class BugNinja:
 Your job is to analyze the current webpage and decide what action to take next to achieve the user's goal.
 
 IMPORTANT PRIORITIES:
-1. ALWAYS handle cookie banners and privacy prompts first before anything else
+1. ALWAYS handle cookie banners and privacy prompts first before anything else! 
 2. If you are provided with a login form, use the provided credentials when appropriate, this could be also part of a testing journey on many websites. In some cases you maybe have register a new account. You can use made-up information with John Doe to fill up the form.
 3. Focus on the main task after handling popups and logins
 4. Try to examine multiple options if the first try didn't work in a previous step for a specific task.
@@ -402,6 +402,8 @@ When identifying elements, provide as much descriptive information as possible:
 3. If targeting a specific input field, mention its purpose (e.g., "email input", "password field")
 4. If you see a specific ID, class, or placeholder text in the element, include that in your reasoning
 5. Describe the visual characteristics and location of the element when possible
+
+REMEMBER, ALWAYS ACCEPT COOKIE BANNERS AND PRIVACY PROMPTS FIRST BEFORE ANYTHING ELSE!
 
 Respond in JSON format with these fields:
 - action: "click" or "type"
@@ -1182,13 +1184,31 @@ Consider all the previous steps and actions taken so far.
 
                 # Wait for the page to fully load
                 await self.wait_for_page_load()
-                print("📄 Page fully loaded")
+
+                # Take a screenshot for goal completion check
+                screenshot_path = await self.take_screenshot()
+
+                # Check goal completion first at each step
+                goal_achieved, confidence, reasoning = await self.check_goal_completion(
+                    screenshot_path, goal, self.page.url
+                )
+
+                # If goal is achieved with sufficient confidence, exit the loop
+                if goal_achieved and confidence >= self.goal_confidence:
+                    print(
+                        f"🎉 Goal achieved with confidence {confidence:.2f} (threshold: {self.goal_confidence:.2f})"
+                    )
+                    print(f"💭 Reasoning: {reasoning}")
+                    self.goal_achieved = True
+                    break
+
+                # If goal is not achieved, continue with the next action
+                print(
+                    f"⚠️ Goal verification: Not achieved (confidence: {confidence:.2f})"
+                )
 
                 # Gather all elements from the page
                 elements = await self.gather_page_elements()
-
-                # Take a screenshot
-                screenshot_path = await self.take_screenshot()
 
                 # Ask AI for a decision
                 decision = await self.ask_ai_for_decision(
@@ -1197,39 +1217,6 @@ Consider all the previous steps and actions taken so far.
 
                 # Execute the decision
                 success = await self.execute_decision(decision, elements)
-
-                # Check if the goal has been achieved
-                if decision.get("goal_achieved", False):
-                    confidence = decision.get("confidence", 0)
-                    if confidence >= self.goal_confidence:
-                        print(
-                            f"🎉 Goal achieved with confidence {confidence:.2f} (threshold: {self.goal_confidence:.2f})"
-                        )
-                        self.goal_achieved = True
-                    else:
-                        print(
-                            f"⚠️ Goal detection: Not achieved (confidence: {confidence:.2f})"
-                        )
-
-                        # Double-check with a separate goal completion check
-                        goal_check = await self.check_goal_completion(
-                            screenshot_path, goal, self.page.url
-                        )
-                        if goal_check.get("goal_achieved", False):
-                            confidence = goal_check.get("confidence", 0)
-                            if confidence >= self.goal_confidence:
-                                print(
-                                    f"🎉 Goal verification: Achieved with confidence {confidence:.2f}"
-                                )
-                                self.goal_achieved = True
-                            else:
-                                print(
-                                    f"⚠️ Goal verification: Not achieved (confidence: {confidence:.2f})"
-                                )
-                        else:
-                            print("⚠️ Goal verification: Not achieved")
-                else:
-                    print("⚠️ Goal detection: Not achieved")
 
                 # Wait a bit before the next action to allow page to update
                 await asyncio.sleep(1)
