@@ -64,6 +64,7 @@ parts/
 sdist/
 var/
 wheels/
+*.pyc
 
 # Logs
 *.log
