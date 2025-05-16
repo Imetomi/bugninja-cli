@@ -6,7 +6,7 @@ This tool uses Azure OpenAI's vision capabilities to automate web navigation. It
 
 1. Launches a browser with Playwright (headless by default, with option for visible mode)
 2. Records video of the entire browsing session
-3. Takes periodic screenshots to send to Azure OpenAI
+3. Takes periodic screenshots at each step to send to Azure OpenAI
 4. Asks the AI "what should I click/type next?"
 5. Executes the AI's decision
 6. Continuously evaluates if the goal has been reached
@@ -19,6 +19,15 @@ This tool uses Azure OpenAI's vision capabilities to automate web navigation. It
 * Automatically detects common credential environment variables (`EMAIL`, `PASSWORD`, `USERNAME`, `API_KEY`, `PHONE`)
 * Passes these variables to Azure OpenAI so it can decide when to use them for login forms
 * Marks inputs as `secret=true` when using credentials to avoid logging
+* The code below shows how to define Azure's client. Import this class from the python OpenAI library. 
+
+```python
+self.client = AsyncAzureOpenAI(
+   api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+   api_version="2023-12-01-preview",
+   azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+)
+```
 
 ## Video Recording
 
